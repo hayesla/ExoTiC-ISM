@@ -387,3 +387,23 @@ def quadratic_limb_darkening(x, aLD=0.0, bLD=0.0):
     """
     model = 1. - aLD * (1. - x) - bLD * (1. - x) ** (4. / 2.)
     return model
+
+
+def tri_linear_interp(p0, x, y, z, c, v):
+    """
+    applies tri linear interpolation on a cube of model values to calculate the interpolated value. 
+    """
+
+    xd = (p0[0] - x[0]) / (x[1] - x[0])
+    yd = (p0[1] - y[0]) / (y[1] - y[0])
+    zd = (p0[2] - z[0]) / (z[1] - z[0])
+
+    c00 = (c[0,0,0]*(1 - xd)) + (c[0,1,0]*xd)
+    c01 = (c[1,0,0]*(1 - xd)) + (c[1,1,0]*xd)
+    c10 = (c[0,0,1]*(1 - xd)) + (c[0,1,1]*xd)
+    c11 = (c[1,0,1]*(1 - xd)) + (c[1,1,1]*xd)
+
+    c0 = c00*(1-yd) + c10*yd
+    c1 = c01*(1-yd) + c11*yd
+
+    v = c0*(1-zd) + c1*zd
