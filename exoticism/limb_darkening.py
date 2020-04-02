@@ -3,6 +3,7 @@ This is a self-standing module that calculates limb darkening parameters for eit
 returns the parameters for 4-parameter, 3-parameter, quadratic and linear limb darkening models.
 """
 
+import sys
 import os
 import numpy as np
 import pandas as pd
@@ -46,61 +47,145 @@ def limb_dark_fit(grating, wsdata, M_H, Teff, logg, dirsen, ld_model='1D'):
         print('Current Directories Entered:')
         print('  ' + dirsen)
         print('  ' + direc)
-
-        # Select metallicity
-        M_H_Grid = np.array([-0.1, -0.2, -0.3, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0, -3.5, -4.0, -4.5, -5.0, 0.0, 0.1, 0.2, 0.3, 0.5, 1.0])
-        M_H_Grid_load = np.array([0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 17, 20, 21, 22, 23, 24])
-        optM = (abs(M_H - M_H_Grid)).argmin()
-        MH_ind = M_H_Grid_load[optM]
-
-        # Determine which model is to be used, by using the input metallicity M_H to figure out the file name we need
+        # Determine which model is to be used, the input metallicity M_H is later used to figure out the file name we need
         direc = 'Kurucz'
         file_list = 'kuruczlist.sav'
         sav1 = readsav(os.path.join(dirsen, file_list))
-        model = bytes.decode(sav1['li'][MH_ind])  # Convert object of type "byte" to "string"
 
-        # Select Teff and subsequently logg
-        Teff_Grid = np.array([3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000, 6250, 6500])
-        optT = (abs(Teff - Teff_Grid)).argmin()
+        # Select metallicity values above and below the input value. If input matches a value that is taken as the lower value in the interpolation grid.
+        M_H_Grid = np.array([-5.0, -4.5, -4.0, -3.5, -3.0, -2.5, -2.0, -1.5, -1.0, -0.5, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.5, 1.0])
+        M_H_Grid_load = np.array([14, 13, 12, 11, 10, 9, 8, 7, 5, 3, 2, 1, 0, 17, 20, 21, 22, 23, 24])
 
-        logg_Grid = np.array([4.0, 4.5, 5.0])
-        optG = (abs(logg - logg_Grid)).argmin()
+        # ERROR MESSAGE
+        if M_H <= M_H_Grid[0] or M_H > M_H_Grid[-1]: 
+            print('WARNING: Stellar metallicity needs to be between {} and {}'.format(M_H_Grid[0], M_H_Grid[-1]))
+            sys.exit()
 
-        if logg_Grid[optG] == 4.0:
-            Teff_Grid_load = np.array([8, 19, 30, 41, 52, 63, 74, 85, 96, 107, 118, 129, 138])
+        optM_n = np.where(M_H >= M_H_Grid)[0]
+        optM_p = np.where(M_H < M_H_Grid)[0]
+        optM = [optM_n[-1], optM_p[0]]
+        print('optM_p = ', optM_p, 'optM_n = ', optM_n, 'optM = ',optM)
 
-        elif logg_Grid[optG] == 4.5:
-            Teff_Grid_load = np.array([9, 20, 31, 42, 53, 64, 75, 86, 97, 108, 119, 129, 139])
+        optM_ind = M_H_Grid_load[optM]
 
-        elif logg_Grid[optG] == 5.0:
-            Teff_Grid_load = np.array([10, 21, 32, 43, 54, 65, 76, 87, 98, 109, 120, 130, 140])
+        # Read in the 1D grid data structure file containing all the grids of available Teff and logg for each assigned M_H
+        model_grid_file = os.path.join(dirsen,direc,'ld_parameter_grids.npz')
+        with np.load(model_grid_file) as loaded_grid_file:
+            model_grid_setup = [loaded_grid_file[q] for q in loaded_grid_file.files]
 
-        # Where in the model file is the section for the Teff we want? Index T_ind tells us that.
-        T_ind = Teff_Grid_load[optT]
-        header_rows = 3    #  How many rows in each section we ignore for the data reading
-        data_rows = 1221   # How  many rows of data we read
-        line_skip_data = (T_ind + 1) * header_rows + T_ind * data_rows   # Calculate how many lines in the model file we need to skip in order to get to the part we need (for the Teff we want).
-        line_skip_header = T_ind * (data_rows + header_rows)
+        model_grid_n = model_grid_setup[optM[0]]
+        model_grid_p = model_grid_setup[optM[1]]
 
-        # Read the header, in case we want to have the actual Teff, logg and M_H info.
-        # headerinfo is a pandas object.
-        headerinfo = pd.read_csv(os.path.join(dirsen, direc, model), delim_whitespace=True, header=None,
-                                 skiprows=line_skip_header, nrows=1)
+        print(model_grid_n.shape, model_grid_p.shape)
+        sys.exit()
+        # Select Teff and loggabove and below the input value. If input matches a value that is taken as the lower value in the interpolation grid.
+        Teff_Grid = np.array([3500, 3750, 4000, 4250, 4500, 4750, 5000, 5250, 5500, 5750, 6000, 6250, 6500, 6750, 7000, 7250, 7500, 7750, 8000, 8250, 8500, 8750, 9000, 9250, 9500, 9750, 10000, 10250])
+        # ERROR MESSAGE
+        if Teff <= Teff_Grid[0] or Teff > Teff_Grid[-1]: 
+            print('WARNING: Teff needs to be between {}K and {}K'.format(Teff_Grid[0], Teff_Grid[-1]))
+            sys.exit()
 
-        Teff_model = headerinfo[1].values[0]
-        logg_model = headerinfo[3].values[0]
-        MH_model = headerinfo[6].values[0]
-        MH_model = float(MH_model[1:-1])
+        optT_n = np.where(Teff >= Teff_Grid)[0]
+        optT_p = np.where(Teff < Teff_Grid)[0]
+        optT = [optT_n[-1], optT_p[0]]
 
-        print('\nClosest values to your inputs:')
-        print('Teff: ', Teff_model)
-        print('M_H: ', MH_model)
-        print('log(g): ', logg_model)
+        print('optT_p = ', optT_p, 'optT_n = ', optT_n, 'optT = ',optT)
 
-        # Read the data; data is a pandas object.
-        data = pd.read_csv(os.path.join(dirsen, direc, model), delim_whitespace=True, header=None,
-                              skiprows=line_skip_data, nrows=data_rows)
+        logg_Grid = np.array([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0])
+        # ERROR MESSAGE
+        if logg <= logg_Grid[0] or logg > logg_Grid[-1]: 
+            print('WARNING: Stellar logg needs to be between {} and {}'.format(logg_Grid[0], logg_Grid[-1]))
+            sys.exit()
 
+        optG_n = np.where(logg >= logg_Grid)[0]
+        optG_p = np.where(logg < logg_Grid)[0]
+        optG = [optG_n[-1], optG_p[0]]
+
+        print('optG_p = ', optG_p, 'optG_n = ', optG_n, 'optG = ',optG)
+
+        # The edges of each of the grid spaces have now been found. We now need to set up what file they correspond to.
+        leng = len(logg_Grid) 
+        print(leng)
+
+        N1 = (optT[0] * leng) + optG[0]
+        N2 = (optT[1] * leng) + optG[0]
+        N3 = (optT[0] * leng) + optG[1]
+        N4 = (optT[1] * leng) + optG[1]
+
+        # Above Teff = 6175 the grid shape changes so we have to accomodate that
+        if Teff > 6175:
+            topt = np.where(abs(6250 - Teff_Grid) == np.amin(abs(6250 - Teff_Grid)))[0]
+            n0 = (topt * leng) 
+            print(topt, topt.shape)
+
+            N1 = n0 + ((optT[0]-topt) * (leng-1)) + optG[0]-1
+            N2 = n0 + ((optT[1]-topt) * (leng-1)) + optG[0]-1
+            N3 = n0 + ((optT[0]-topt) * (leng-1)) + optG[1]-1
+            N4 = n0 + ((optT[1]-topt) * (leng-1)) + optG[1]-1
+        
+        Nt_grid = np.array([N1, N2])
+        Ng_grid = np.array([N3, N4])
+        N_grid = np.array([[N1,N2],[N3,N4]])
+
+        print(N_grid)
+
+        # if logg_Grid[optG] == 4.0:
+        #     Teff_Grid_load = np.array([8, 19, 30, 41, 52, 63, 74, 85, 96, 107, 118, 129, 138])
+
+        # elif logg_Grid[optG] == 4.5:
+        #     Teff_Grid_load = np.array([9, 20, 31, 42, 53, 64, 75, 86, 97, 108, 119, 129, 139])
+
+        # elif logg_Grid[optG] == 5.0:
+        #     Teff_Grid_load = np.array([10, 21, 32, 43, 54, 65, 76, 87, 98, 109, 120, 130, 140])
+        linear_grid = np.empty([2,2,2])
+        quad_grid = np.empty([2,2,2,2])
+        p3_grid = np.empty([2,2,2,3])
+        p4_grid = np.empty([2,2,2,4])
+
+        # loop through each of the grid points and save the values in the arrays initiated above.
+        for metal in range(len(optM_ind)):
+            metal=1
+            print('Metalicity loop = ', metal, ' for [Fe/H] = ', M_H_Grid[optM[metal]], ' at grid point', optM_ind[metal])
+            for temp in range(len(Nt_grid)):
+                temp=1
+                print('Temperature loop = ', temp, ' for Teff = ', Teff_Grid[optT[temp]], 'K at grid point ', optT[temp])
+                for grav in range(len(Ng_grid)):
+                    grav=1
+                    print('Gravity loop = ', grav, ' for logg = ', logg_Grid[optG[grav]], ' at grid point ', optG[grav])
+
+                    model = bytes.decode(sav1['li'][optM_ind[metal]])  # Convert object of type "byte" to "string"
+
+                    # # Where in the model file is the section for the Teff we want? Index T_ind tells us that.
+                    data_index = N_grid[grav,temp]
+                    header_rows = 3    #  How many rows in each section we ignore for the data reading
+                    data_rows = 1221   # How  many rows of data we read
+                    line_skip_header = (data_rows + header_rows) * data_index
+                    line_skip_data = line_skip_header + 3
+                    print(line_skip_header, line_skip_data)
+                    # line_skip_data = (T_ind + 1) * header_rows + T_ind * data_rows   # Calculate how many lines in the model file we need to skip in order to get to the part we need (for the Teff we want).
+                    # line_skip_header = T_ind * (data_rows + header_rows)
+
+                    # Read the header, in case we want to have the actual Teff, logg and M_H info.
+                    # headerinfo is a pandas object.
+                    headerinfo = pd.read_csv(os.path.join(dirsen, direc, model), delim_whitespace=True, header=None,
+                                             skiprows=line_skip_header, nrows=1)
+
+                    Teff_model = headerinfo[1].values[0]
+                    logg_model = headerinfo[3].values[0]
+                    MH_model = headerinfo[6].values[0]
+                    MH_model = float(MH_model[1:-1])
+
+                    print('\nClosest values to your inputs:')
+                    print('Teff: ', Teff_model)
+                    print('M_H: ', MH_model)
+                    print('log(g): ', logg_model)
+
+                    print(os.path.join(dirsen, direc, model))
+                    # Read the data; data is a pandas object.
+                    data = pd.read_csv(os.path.join(dirsen, direc, model), delim_whitespace=True, header=None,
+                                          skiprows=line_skip_data, nrows=data_rows)
+                    print(headerinfo)
+                    sys.exit()
         # Unpack the data
         ws = data[0].values * 10   # Import wavelength data
         f0 = data[1].values / (ws * ws)
